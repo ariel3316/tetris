@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק טטריס צבעוני</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-board {
+            border: 2px solid #333;
+            background-color: #111;
+        }
+        #score, #level {
+            margin: 10px 0;
+            font-size: 20px;
+        }
+        #start-button {
+            font-size: 18px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-board" width="300" height="600"></canvas>
+        <div id="score">ניקוד: 0</div>
+        <div id="level">רמה: 1</div>
+        <button id="start-button">התחל משחק</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-board');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const levelElement = document.getElementById('level');
+        const startButton = document.getElementById('start-button');
+
+        const ROWS = 20;
+        const COLS = 10;
+        const BLOCK_SIZE = 30;
+        const COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#00FFFF', '#FF00FF', '#FFA500'];
+
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        let currentPiece = null;
+        let score = 0;
+        let level = 1;
+        let gameLoop = null;
+
+        const PIECES = [
+            [[1, 1, 1, 1]],
+            [[1, 1], [1, 1]],
+            [[1, 1, 1], [0, 1, 0]],
+            [[1, 1, 1], [1, 0, 0]],
+            [[1, 1, 1], [0, 0, 1]],
+            [[1, 1, 0], [0, 1, 1]],
+            [[0, 1, 1], [1, 1, 0]]
+        ];
+
+        function drawBoard() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (board[row][col]) {
+                        ctx.fillStyle = COLORS[board[row][col] - 1];
+                        ctx.fillRect(col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                }
+            }
+        }
+
+        function drawPiece() {
+            if (!currentPiece) return;
+            ctx.fillStyle = COLORS[currentPiece.color];
+            currentPiece.shape.forEach((row, i) => {
+                row.forEach((value, j) => {
+                    if (value) {
+                        ctx.fillRect((currentPiece.x + j) * BLOCK_SIZE, 
+                                     (currentPiece.y + i) * BLOCK_SIZE, 
+                                     BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                });
+            });
+        }
+
+        function createPiece() {
+            const pieceIndex = Math.floor(Math.random() * PIECES.length);
+            const colorIndex = Math.floor(Math.random() * COLORS.length);
+            return {
+                shape: PIECES[pieceIndex],
+                x: Math.floor(COLS / 2) - Math.ceil(PIECES[pieceIndex][0].length / 2),
+                y: 0,
+                color: colorIndex
+            };
+        }
+
+        function collision() {
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x] && 
+                        (board[y + currentPiece.y] && board[y + currentPiece.y][x + currentPiece.x]) !== 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function merge() {
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        board[y + currentPiece.y][x + currentPiece.x] = currentPiece.color + 1;
+                    }
+                });
+            });
+        }
+
+        function rotate() {
+            const rotated = currentPiece.shape[0].map((_, index) =>
+                currentPiece.shape.map(row => row[index]).reverse()
+            );
+            const previousShape = currentPiece.shape;
+            currentPiece.shape = rotated;
+            if (collision()) {
+                currentPiece.shape = previousShape;
+            }
+        }
+
+        function clearLines() {
+            let linesCleared = 0;
+            for (let y = ROWS - 1; y >= 0; y--) {
+                if (board[y].every(value => value !== 0)) {
+                    board.splice(y, 1);
+                    board.unshift(Array(COLS).fill(0));
+                    linesCleared++;
+                }
+            }
+            if (linesCleared > 0) {
+                score += linesCleared * linesCleared * 100;
+                scoreElement.textContent = `ניקוד: ${score}`;
+                if (score >= level * 1000) {
+                    level++;
+                    levelElement.textContent = `רמה: ${level}`;
+                }
+            }
+        }
+
+        function gameOver() {
+            cancelAnimationFrame(gameLoop);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('המשחק נגמר', canvas.width / 2, canvas.height / 2);
+            startButton.style.display = 'block';
+        }
+
+        function update() {
+            currentPiece.y++;
+            if (collision()) {
+                currentPiece.y--;
+                merge();
+                clearLines();
+                currentPiece = createPiece();
+                if (collision()) {
+                    gameOver();
+                    return;
+                }
+            }
+            draw();
+            gameLoop = requestAnimationFrame(() => setTimeout(update, 1000 / level));
+        }
+
+        function draw() {
+            drawBoard();
+            drawPiece();
+        }
+
+        function moveLeft() {
+            currentPiece.x--;
+            if (collision()) {
+                currentPiece.x++;
+            }
+        }
+
+        function moveRight() {
+            currentPiece.x++;
+            if (collision()) {
+                currentPiece.x--;
+            }
+        }
+
+        function moveDown() {
+            currentPiece.y++;
+            if (collision()) {
+                currentPiece.y--;
+                merge();
+                clearLines();
+                currentPiece = createPiece();
+                if (collision()) {
+                    gameOver();
+                    return;
+                }
+            }
+        }
+
+        document.addEventListener('keydown', event => {
+            switch (event.keyCode) {
+                case 37: moveLeft(); break;
+                case 39: moveRight(); break;
+                case 40: moveDown(); break;
+                case 38: rotate(); break;
+            }
+            draw();
+        });
+
+        startButton.addEventListener('click', () => {
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            score = 0;
+            level = 1;
+            scoreElement.textContent = `ניקוד: ${score}`;
+            levelElement.textContent = `רמה: ${level}`;
+            currentPiece = createPiece();
+            startButton.style.display = 'none';
+            update();
+        });
+
+        draw();
+    </script>
+</body>
+</html>
